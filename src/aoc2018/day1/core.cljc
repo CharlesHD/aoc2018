@@ -1,18 +1,17 @@
 (ns aoc2018.day1.core
-  (:require [clojure.java.io :as io]
+  (:require [aoc2018.util :as u]
             [net.cgrand.xforms :as xf]))
 
 ;; L'entrée est une liste de nombres entiers positifs ou négatifs.
 ;; Le problème consiste à trouver la somme de ces nombres en partant de 0.
 (def input "resources/day1/input1")
-(def parse (map read-string))
-(count (line-seq (io/reader input)))
+(def parse (u/parser read-string))
 
 (defn solution1
   [input]
-  (transduce parse + 0 (line-seq (io/reader input))))
+  (transduce parse + 0 (u/lines input)))
 
-(solution1 input)
+(println (solution1 input))
 
 ;; La deuxième partie du problème consiste à trouver la première somme partielle redondante.
 ;; Si aucun nombre n'est répété après une première passe, il faut considérer que l'entrée se répète
@@ -36,7 +35,6 @@
    (eduction (comp parse
                    (xf/reductions + 0) ;; reductions permet de considérer les sommes partielles
                    premier-doublon) ;; on s'arrête au premier doublon trouvé
-             (-> input io/reader line-seq
-                 cycle)))) ;; cycle permet de répéter au début de séquence à volonté
+             (cycle (u/lines input))))) ;; cycle permet de répéter au début de séquence à volonté
 
-(solution2 input)
+(println (solution2 input))
