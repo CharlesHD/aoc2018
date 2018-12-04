@@ -68,9 +68,7 @@
     (update m :gardes (fnil conj []) (assoc log :garde actuel)))) ;; sinon on ajoute cette action au garde actuel
 
 (def actions-par-gardes
-  (comp parse
-        date-sort
-        (xf/reduce (completing add-action) {:actuel nil :gardes []})
+  (comp (xf/reduce (completing add-action) {:actuel nil :gardes []})
         (mapcat :gardes)))
 
 ;; Maintenant on a pour chaque garde sa liste d'action totale. On peut :
@@ -79,50 +77,60 @@
 ;; - transformer ces services en minutes endormies, minutes éveillées.
 ;;   En fait seul les minutes endormies nous intéressent.
 ;;   On peut même remarquer que le garde commence et fini toujours son service éveillé
+
+;; intervalles-sommeil transforme une suite de log en groupe
+;; minute de début - minute de fin
 (def intervalles-sommeil
   (comp (map :minute)
         (xf/partition 2)))
 
-(def casser-service
-  (xf/by-key (juxt :year :month :day)
-             (comp intervalles-sommeil
-                   (xf/into []))))
-
+;; on somme les temps de sommeil d'un flux sous la forme [debut fin]
 (def sommeil-total-de-garde
   (comp (map (fn [[a b]] (- b a)))
         (xf/reduce +)))
 
+;; on calcule les frequences des minutes de sommeil d'un flux sous la forme [debut fin]
 (def minutes-freq
   (comp (xf/for [[a b] % i (range a b)] i)
         (xf/by-key identity xf/count)
         (xf/into {})))
 
+;; transforme un flux d'actions en temps total de sommeil et frequences des minutes de
+;; sommeil par garde.
 (def services-par-gardes
-  (comp actions-par-gardes
-        (xf/by-key :garde (comp casser-service
-                                ;; sommeil-total-de-garde
-                                ;; minutes-freq
-                                (mapcat second)
-                                (xf/transjuxt {:sommeil sommeil-total-de-garde
-                                               :freq minutes-freq})))))
+  (xf/by-key :garde (comp intervalles-sommeil
+                          (xf/transjuxt {:sommeil sommeil-total-de-garde
+                                         :freq minutes-freq}))))
 
+(def sol-xf
+  (comp parse
+        date-sort
+        actions-par-gardes
+        services-par-gardes))
 ;; finalement, à partir de services-par-gardes on obtient
 ;; pour chaque garde son nombre de minutes de sommeil total
 ;; et la frequence pour chaque heure dormie.
 ;; il ne reste qu'à trouver le garde qui dort le plus et la minute à laquelle
 ;; il est le plus souvent endormi
+(defn dormeur-max
+  [gardes]
+  (apply max-key (comp :sommeil val) gardes))
+
+(defn minute-la-plus-zzz
+  [{:keys [freq] :as garde}]
+  (apply max-key val freq))
+
 (defn strategie1
   [gardes]
-  (let [garde (first (apply max-key (comp :sommeil val) gardes))
-        freqs (get-in gardes [garde :freq])
-        minute (first (apply max-key val freqs))]
+  (let [[garde data] (dormeur-max gardes)
+        [minute freq] (minute-la-plus-zzz data)]
     [garde minute]))
 
 (defn solution1
   [input]
   (->> input
        u/lines
-       (into {} services-par-gardes)
+       (into {} sol-xf)
        strategie1
        (apply *)))
 
@@ -134,7 +142,7 @@
 (defn strategie2
   [gardes]
   (->> gardes
-       (into {} (xf/by-key (map (comp #(apply max-key val %) :freq))))
+       (into {} (xf/by-key (map minute-la-plus-zzz)))
        (apply max-key (fn [[garde [min freq]]] freq))
        flatten
        drop-last))
@@ -143,8 +151,12 @@
   [input]
   (->> input
        u/lines
-       (into {} services-par-gardes)
+       (into {} sol-xf)
        strategie2
        (apply *)))
 
 (solution2 input)
+
+;; Contrairement aux jours 2 et 3, je n'ai pas l'impression qu'il y a de vraies optimisations
+;; algorithmique dans cette histoire. La difficulté vient principalement du problème de parsing
+;; et de la manipulation de données.
