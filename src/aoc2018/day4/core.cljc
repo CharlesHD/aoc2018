@@ -3,7 +3,7 @@
             [net.cgrand.xforms :as xf]))
 
 (def input "resources/day4/input1")
-(defn parse-int [n] (Integer/parseInt n))
+(defn parse-int [n] (Integer/parseInt n)) ;; /!\ NON CLJC
 
 ;; Chaque ligne de l'entrée est décomposée en deux, la marque temporelle
 ;; entre crochets et l'action qui la suit. On va détailler comment parser chacune.
