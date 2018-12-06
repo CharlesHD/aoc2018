@@ -36,12 +36,13 @@
 ;; on va définir plein d'opération de géométrie. Ça a l'air compliqué mais c'est juste du vocabulaire.
 ;; Pour définir si on est au-dessus ou au-dessous d'un point on utilise une relation d'ordre
 ;; x * y' < x' * y
-(defn dessous?
+(defn linearite
   [[x y] [x' y']]
-  (< (* x y') (* x' y)))
-(defn dessus?
-  [[x y] [x' y']]
-  (> (* x y') (* x' y)))
+  (- (* x y') (* x' y)))
+
+(def dessous? (comp neg? linearite))
+(def dessus? (comp pos? linearite))
+(def colineaire? (comp zero? linearite))
 
 (defn minus
   [[x y] [x' y']]
@@ -54,6 +55,10 @@
 (defn dessus-droite?
   [[d1 d2] p]
   (dessus? (minus p d1) (minus d2 d1)))
+
+(defn sur-droite?
+  [[d1 d2] p]
+  (colineaire? (minus p d1) (minus d2 d1)) )
 
 ;; on a aussi besoin de bien définir la droite
 (defn droite
@@ -102,37 +107,54 @@
              (reverse (quickhull-dessous d pts))))))
 
 
-;; ok maintenant attribuons les points de la région [xmin xmax] X [ymin ymax]
-;; à leur territoire d'influence respectif.
-(defn influenceur
-  [influenceurs p]
-  (->> (group-by #(distance p %) influenceurs) ;; on groupe les influenceurs / leur distance au point
-       (apply min-key key) ;; on prend les moins éloignés
-       val
-       (#(if (> (count %) 1) ;; s'il y a plus d'un influenceur à équidistance
-           nil  ;; ce point est neutre
-           (first %))))) ;; sinon l'influenceur gagne.
+;; le point qu'on cherche est celui qui est le plus éloigné de tous les autres :
+;; il a le plus de place pour s'étendre au sein de l'enveloppe.
+(defn cumul-distance
+  [pts p]
+  (transduce (map (partial distance p)) + pts))
 
-(defn territoires
-  [pts]
-  (let [[[xmin xmax]
-         [ymin ymax]] (xf/transjuxt [(comp (map first) (xf/transjuxt [xf/min xf/max]))
-                                     (comp (map second) (xf/transjuxt [xf/min xf/max]))] pts)]
-    (for [i (range xmin (inc xmax))
-          j (range ymin (inc ymax))]
-      [i j])))
+(defn n-voisinage
+  [[x y :as p] n]
+  (concat
+   (for [f [+ -]
+         i [0 1]]
+     (update p i f n))
+   (for [i (range 1 n)
+         x-sign [+ -]
+         y-sign [+ -]]
+     [(x-sign x i) (y-sign y (- n i))])))
+
+(defn exclusif
+  [n vois autres]
+  (remove (fn [p] (some #(<= (distance p %) n) autres)) vois))
+
+(defn influence
+  [p autres]
+  (loop [c 0
+         n 1]
+    (let [vois (n-voisinage p n)
+          add (count (exclusif n vois autres))]
+      (println c)
+      (if (zero? add)
+        c
+        (recur (+ c add) (inc n))))))
+
+(defn add-points-on-hull
+  [hull pts]
+  (let [droites (conj (partition 2 1 hull) ((juxt last first) hull))
+        on-hull (fn [p] (some (fn [d] (sur-droite? d p)) droites))]
+    (distinct
+     (concat hull
+             (filter on-hull pts)))))
 
 (defn solution1
   [input]
   (let [pts (->> input u/lines (sequence parse))
-        terrs (territoires pts)
         env (quickhull pts)
-        xf-sol (comp (map (partial influenceur pts))
-                     (remove (set env))
-                     (remove nil?)
-                     (xf/by-key identity xf/count)
-                     (map val))]
-    (transduce xf-sol (completing max) 0 terrs)))
+        env (set (add-points-on-hull env pts))
+        inside (remove (set env) pts)
+        inf (apply max-key #(cumul-distance pts %) inside)]
+    (influence inf (remove #{inf} pts))))
 
 ;; brr c'est terriblement lent. Surement parce qu'il existe des considérations
 ;; beaucoup plus pragmatique vis à vis de la distance manhattan.
@@ -140,10 +162,6 @@
 ;; la deuxième partie considère maintenant qu'on veut la zone des points qui sont
 ;; proches de tous les points de l'entrée. Où être proche signifie être à une distance
 ;; cumulée à tous les points inférieure à 10000.
-
-(defn cumul-distance
- [pts p]
-  (transduce (map (partial distance p)) + pts))
 
 (defn critere
   [pts p]
@@ -158,3 +176,23 @@
     (eduction xf-sol terrs)))
 
 ;; toujours turbolent. Construire et traiter tout terrs c'est stupide
+
+(defn- coord-barycentrique
+  [p triangle]
+  (let [[[a1 a2] [b1 b2] [c1 c2]] triangle
+        [p1 p2] p
+        bc2 (- b2 c2)
+        ac1 (- a1 c1) ac2 (- a2 c2)
+        cb1 (- c1 b1)
+        pc1 (- p1 c1)
+        pc2 (- p2 c2)
+        det (+ (* bc2 ac1)
+               (* cb1 ac2))
+        l1 (/ (+ (* bc2 pc1) (* cb1 pc2)) det)
+        l2 (/ (+ (* (- ac2) pc1) (* ac1 pc2)) det)
+        l3 (- 1 l1 l2)]
+    [l1 l2 l3]))
+
+(defn triangle-contient
+  [triangle p]
+  (every? pos? (coord-barycentrique p triangle)))
