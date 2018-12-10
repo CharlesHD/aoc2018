@@ -1,4 +1,4 @@
-(ns aoc2018.day6.core
+(ns aoc2018.day7.core
   (:require [aoc2018.util :as u]
             [clojure.set :as set]
             [com.rpl.specter :refer :all]
