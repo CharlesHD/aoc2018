@@ -5,6 +5,7 @@
  :resource-paths #{"resources"}
  :target-path "tmp"
  :dependencies '[[org.clojure/clojure "1.9.0"]
+                 [com.taoensso/tufte "2.0.1"]
                  [com.rpl/specter "1.1.2"]
                  [net.cgrand/xforms "0.18.2"]])
 
