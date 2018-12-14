@@ -19,6 +19,16 @@
       (quot 100)
       (mod 10)
       (- 5)))
+;; À x et serie fixées cette fonction est périodique en y, je sais pas si ça va servir.
+;; la raison est sa forme a*y+b mod c, ce qui en fait un générateur congruentiel linéaire.
+(defn lcg
+  [x y serie]
+  (-> (+ x 10)
+      (* y)
+      (+ serie)
+      (* (+ x 10))
+      (/ 100)
+      (mod 10)))
 
 (assert (= (niveau-energie 3 5 8) 4))
 (assert (= (niveau-energie 122 79 57) -5))
@@ -106,27 +116,45 @@
 ;; L'espace de couverture est trop grand (300^3 pfiou)
 
 ;; Est-ce que ce serait pas l'heure de diviser et de conquérir ?
-;; Par exemple, le meilleur carré est soit dans la moitié gauche de la grille, soit dans
-;; la moitié droite, soit à cheval sur la ligne médiane ?
-;; Quelle est la complexité de ce calcul ?
-;; Si on note T(largeur-max, )
+;; On peut implémenter la meilleur sous-chaîne en une dimension,
+;; et peut-être se servir de ça pour résoudre notre problème en 2D.
 
-(defn solve-middle
-  [input xmin piv xmax]
-  (apply max-key last
-         (for [i (range xmin piv)
-               j (range 0 299)
-               s (range (- piv i) (- xmax i))]
-           [i j s (niveau-cumulee-zone-mem i j s input)])))
+(defn meilleur
+  [coll]
+  (apply max-key last [-10000] coll))
 
-(defn solve
-  [input xmin xmax]
-  (if (>= xmin xmax)
-    (apply max-key last (for [j (range 1 299)]
-                          [xmin j 1 (niveau-energie xmin j input)]))
-    (let [pivot (quot (- xmax xmin) 2)]
-      (max (solve input xmin pivot)
-           (solve input (inc pivot) xmax)
-           (solve-middle input xmin (inc pivot) xmax)))))
+(defn comb
+  [x y]
+  [(first x) (first y) (+ (last x) (last y))])
 
-(assert (= (solution2 18) [90 269 16 113]))
+(defn sous-suite-maximale-milieu
+  [score-fn xmin pivot xmax]
+  (let [[_ x s] (meilleur (reductions comb (map #(vector % % (score-fn %)) (reverse (range xmin pivot)))))
+        [_ y s'] (meilleur (reductions comb (map #(vector % % (score-fn %)) (range pivot xmax))))]
+    [x y (+ s s')]))
+
+(defn sous-suite-maximale
+  [score-fn xmin xmax]
+  (if (<= (- xmax xmin) 1)
+    [xmin xmax (score-fn xmin)]
+    (let [pivot (+ xmin (quot (- xmax xmin) 2))]
+      (max-key last
+               (sous-suite-maximale score-fn xmin pivot)
+               (sous-suite-maximale score-fn pivot xmax)
+               (sous-suite-maximale-milieu score-fn xmin pivot xmax)))))
+
+(sous-suite-maximale-milieu #(niveau-energie % 20 18) 0 150 300)
+
+;; Mouai en fait pas sur que ça serve
+
+;; Bruteforce !!!!!!!
+(defn solution10000
+  [input]
+  (meilleur
+   (pmap
+    (fn [[i s]]
+      (meilleur (map #(vector i % s (niveau-cumulee-zone-mem i % s input)) (range 1 (- 300 s)))))
+    (for [i (range 1 300)
+          j (range (inc i) 300)
+          :let [s (- j i)]]
+      [i s]))))
