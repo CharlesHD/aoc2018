@@ -31,7 +31,7 @@
          {:score 0
           :taille (inc taille)
           :cercle (let [[avant apres] (split-at (sens taille 2) cercle)]
-                    (vec (concat [bille] apres avant)))})))
+                    (vec (concat [bille] apres avant )))})))
 
 (assert (= (:cercle (ajouter-bille {:cercle [0] :taille 1} 1))
            [1 0]))
@@ -61,3 +61,35 @@
        :scores
        vals
        (apply max)))
+
+(defn insert-index
+  [[prev-idx taille i]]
+  (if (zero? (mod i 23))
+    [(mod (- prev-idx 7) taille) (dec taille) (inc i)]
+    [(mod (+ prev-idx 2) taille) (inc taille) (inc i)]))
+
+(def cercle-et-score
+  (xf/reduce
+   (completing
+    (fn [[v score] [i _ c]]
+      (if (and (pos? (dec c)) (zero? (mod (dec c) 23)))
+        [(setval (nthpath i) NONE v)
+         (conj score (nth v i nil))]
+        [(setval (before-index i) (dec c) v)
+         score])))
+   [[] []]))
+
+(defn xfsol
+  [nb-billes nb-joueurs]
+  (comp
+   (take nb-billes)
+   cercle-et-score
+   (mapcat second)
+   (map-indexed (fn [i x] (+ x 23 (* i 23))))
+   (map-indexed vector)
+   (xf/by-key (fn [[i _]] (mod i nb-joueurs))
+              second (xf/reduce +))))
+
+(defn solution1
+  [nb-billes nb-joueurs]
+  (into {} (xfsol nb-billes nb-joueurs) (iterate insert-index [0 1 1])))
